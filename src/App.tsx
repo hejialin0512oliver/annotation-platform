@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/app-layout'
 import DashboardPage from '@/pages/dashboard'
 import DatasetsPage from '@/pages/datasets'
@@ -9,9 +10,24 @@ import LLMSettingsPage from '@/pages/settings/llm'
 
 const basename = import.meta.env.BASE_URL
 
+function RedirectHandler() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const redirectPath = sessionStorage.getItem('redirect-path')
+    if (redirectPath) {
+      sessionStorage.removeItem('redirect-path')
+      navigate(redirectPath, { replace: true })
+    }
+  }, [navigate])
+
+  return null
+}
+
 function App() {
   return (
     <BrowserRouter basename={basename}>
+      <RedirectHandler />
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
