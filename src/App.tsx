@@ -7,9 +7,11 @@ import PromptTemplatesPage from '@/pages/templates/prompts'
 import AnnotationTemplatesPage from '@/pages/templates/annotation'
 import LLMSettingsPage from '@/pages/settings/llm'
 
+const basename = import.meta.env.BASE_URL
+
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
