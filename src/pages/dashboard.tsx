@@ -1,3 +1,4 @@
+import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Database,
@@ -8,13 +9,32 @@ import {
   CheckCircle2,
   Clock,
   ListTodo,
+  Download,
+  Upload,
+  HardDrive,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/app-store'
 
 export default function DashboardPage() {
-  const { datasets, annotationTemplates, promptTemplates, llmConfigs, annotationRecords } =
+  const { datasets, annotationTemplates, promptTemplates, llmConfigs, annotationRecords, exportData, importData } =
     useAppStore()
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importMode, setImportMode] = useState<'replace' | 'merge'>('merge')
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSuccess, setImportSuccess] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const totalAnnotated = annotationRecords.length
   const totalRows = datasets.reduce((sum, d) => sum + d.rowCount, 0)
@@ -76,6 +96,52 @@ export default function DashboardPage() {
     },
   ]
 
+  const handleExport = () => {
+    const json = exportData()
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `annotation-platform-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportClick = () => {
+    setImportDialogOpen(true)
+    setImportError(null)
+    setImportSuccess(false)
+    setImportMode('merge')
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const content = event.target?.result as string
+      const result = importData(content, importMode)
+      if (result.success) {
+        setImportSuccess(true)
+        setImportError(null)
+      } else {
+        setImportError(result.error || '导入失败')
+        setImportSuccess(false)
+      }
+    }
+    reader.onerror = () => {
+      setImportError('文件读取失败')
+    }
+    reader.readAsText(file)
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -113,7 +179,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -171,7 +237,128 @@ export default function DashboardPage() {
             ))}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <HardDrive className="h-5 w-5" />
+              数据管理
+            </CardTitle>
+            <CardDescription>导入导出配置数据</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <button
+              onClick={handleExport}
+              className="flex w-full items-center gap-4 rounded-lg border border-border p-4 text-left transition-colors hover:bg-secondary/50"
+            >
+              <div className="rounded-lg bg-secondary p-2">
+                <Download className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium">导出数据</p>
+                <p className="text-sm text-muted-foreground">导出所有配置和标注数据为 JSON</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <button
+              onClick={handleImportClick}
+              className="flex w-full items-center gap-4 rounded-lg border border-border p-4 text-left transition-colors hover:bg-secondary/50"
+            >
+              <div className="rounded-lg bg-secondary p-2">
+                <Upload className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium">导入数据</p>
+                <p className="text-sm text-muted-foreground">从 JSON 文件导入配置和数据</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>导入数据</DialogTitle>
+            <DialogDescription>
+              选择导入方式，然后选择 JSON 文件进行导入
+            </DialogDescription>
+          </DialogHeader>
+
+          {importSuccess ? (
+            <div className="py-6 text-center">
+              <CheckCircle2 className="mx-auto h-12 w-12 text-green-500" />
+              <p className="mt-4 text-lg font-medium">导入成功！</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                数据已成功导入
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 py-4">
+                <div className="space-y-3">
+                  <Label>导入方式</Label>
+                  <RadioGroup
+                    value={importMode}
+                    onValueChange={(v: string) => setImportMode(v as 'replace' | 'merge')}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-start space-x-3 space-y-0 rounded-md border p-3">
+                      <RadioGroupItem value="merge" id="merge" />
+                      <Label htmlFor="merge" className="flex-1 cursor-pointer font-normal">
+                        <span className="font-medium">合并导入</span>
+                        <p className="text-sm text-muted-foreground">
+                          保留现有数据，按 ID 合并，相同 ID 的数据会被覆盖
+                        </p>
+                      </Label>
+                    </div>
+                    <div className="flex items-start space-x-3 space-y-0 rounded-md border p-3">
+                      <RadioGroupItem value="replace" id="replace" />
+                      <Label htmlFor="replace" className="flex-1 cursor-pointer font-normal">
+                        <span className="font-medium">替换全部</span>
+                        <p className="text-sm text-muted-foreground">
+                          清空现有数据，完全替换为导入的内容
+                        </p>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {importError && (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {importError}
+                  </div>
+                )}
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </>
+          )}
+
+          <DialogFooter>
+            {importSuccess ? (
+              <Button onClick={() => setImportDialogOpen(false)}>完成</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  选择文件
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

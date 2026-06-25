@@ -58,6 +58,9 @@ export interface AppStore extends AppState {
   getDatasetAnnotations: (datasetId: string) => AnnotationRecord[]
 
   setCurrentAnnotator: (name: string) => void
+
+  exportData: () => string
+  importData: (json: string, mode: 'replace' | 'merge') => { success: boolean; error?: string }
 }
 
 export const useAppStore = create<AppStore>()(
@@ -218,6 +221,94 @@ export const useAppStore = create<AppStore>()(
       },
 
       setCurrentAnnotator: (name) => set({ currentAnnotator: name }),
+
+      exportData: () => {
+        const state = get()
+        const data: AppState = {
+          llmConfigs: state.llmConfigs,
+          activeLlmConfigId: state.activeLlmConfigId,
+          promptTemplates: state.promptTemplates,
+          annotationTemplates: state.annotationTemplates,
+          datasets: state.datasets,
+          annotationRecords: state.annotationRecords,
+          currentAnnotator: state.currentAnnotator,
+        }
+        return JSON.stringify(
+          {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            data,
+          },
+          null,
+          2
+        )
+      },
+
+      importData: (json, mode) => {
+        try {
+          const parsed = JSON.parse(json)
+          const importData = parsed.data as AppState
+
+          if (!importData) {
+            return { success: false, error: '无效的导入文件格式' }
+          }
+
+          if (mode === 'replace') {
+            set({
+              llmConfigs: importData.llmConfigs || [],
+              activeLlmConfigId: importData.activeLlmConfigId || null,
+              promptTemplates: importData.promptTemplates || [],
+              annotationTemplates: importData.annotationTemplates || [],
+              datasets: importData.datasets || [],
+              annotationRecords: importData.annotationRecords || [],
+              currentAnnotator:
+                importData.currentAnnotator || 'annotator',
+            })
+          } else {
+            const state = get()
+
+            const mergeById = <T extends { id: string }>(
+              existing: T[],
+              incoming: T[] | undefined
+            ): T[] => {
+              if (!incoming) return existing
+              const map = new Map(existing.map((item) => [item.id, item]))
+              incoming.forEach((item) => {
+                map.set(item.id, item)
+              })
+              return Array.from(map.values())
+            }
+
+            set({
+              llmConfigs: mergeById(state.llmConfigs, importData.llmConfigs),
+              activeLlmConfigId:
+                importData.activeLlmConfigId || state.activeLlmConfigId,
+              promptTemplates: mergeById(
+                state.promptTemplates,
+                importData.promptTemplates
+              ),
+              annotationTemplates: mergeById(
+                state.annotationTemplates,
+                importData.annotationTemplates
+              ),
+              datasets: mergeById(state.datasets, importData.datasets),
+              annotationRecords: mergeById(
+                state.annotationRecords,
+                importData.annotationRecords
+              ),
+              currentAnnotator:
+                state.currentAnnotator || importData.currentAnnotator,
+            })
+          }
+
+          return { success: true }
+        } catch (e) {
+          return {
+            success: false,
+            error: e instanceof Error ? e.message : '导入失败',
+          }
+        }
+      },
     }),
     {
       name: 'annotation-platform-store',
