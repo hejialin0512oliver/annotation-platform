@@ -66,6 +66,14 @@ export function buildSummaryPrompt(
   rowData: Record<string, string>
 ): LLMChatMessage[] {
   let userPrompt = userPromptTemplate
+
+  if (userPrompt.includes('{{row_data}}')) {
+    userPrompt = userPrompt.replace(
+      /\{\{row_data\}\}/g,
+      JSON.stringify(rowData, null, 2)
+    )
+  }
+
   Object.entries(rowData).forEach(([key, value]) => {
     userPrompt = userPrompt.replace(
       new RegExp(`\\{\\{${key}\\}\\}`, 'g'),
